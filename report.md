@@ -75,6 +75,7 @@ Beside of main loop and *Worker goroutine*, Ticker goroutine (`time.NewTicker(2*
 - Row-band partitioning (not column) — sequential memory access, cache-friendly.
 - RPC boundary at turn granularity — allows pause/stop between turns.
 - Broker holds `BrokerState` behind one mutex — single source of truth for `world`, `turn`, `aliveCount`, `paused`.]
+- Cut the world into several threads and spilt them to workers and coordinate the data exchange at the boundaries of the world
 
 ---
 
