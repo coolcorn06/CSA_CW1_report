@@ -122,22 +122,14 @@ However, this result might be affected by the chip of the computer that runs thi
 
 | Workers | turns/s | Speed-up vs 1 worker | Network bytes per run |
 |---:|---:|---:|---:|
-| 1 | [TODO] | 1.00× | [TODO] |
-| 2 | [TODO] | [TODO] | [TODO] |
-| 4 | [TODO] | [TODO] | [TODO] |
-| 8 | [TODO] | [TODO] | [TODO] |
+| 1 | 100 | 1.00× | 528MB |
+| 2 | 189 | 1.72 | 791MB |
+| 4 | 289 | 2.62 | 1.32GB |
+| 8 | 246 | 2.23 | 2.37GB |
 
-[Figure 4: worker speed-up curve vs local `-t 8` throughput as a horizontal reference line.]
+Figure 4: This is examined by running the benchmark_test.go on a M2 chip
 
-[TODO: compute network bytes explicitly, e.g. `512×512 × 100 turns × N workers`; put the formula and the number in the “Network bytes” column.]
-
-**Analysis.** [TODO: 4–6 sentences. Must address: (i) why distributed on loopback is slower than local `-t 8` — `CurrentMap` re-serialisation dominates; (ii) why the worker curve flattens — broker's `connectToWorkers` collects results **serially**, so broker itself becomes the bottleneck; (iii) where the crossover would be on a real network / with a larger board. Cite your own numbers and the formula from §1.4.]
-
-### 2.4 Factors behind the virtues and limitations
-
-[TODO: two short paragraphs or a two-column table:
-- **Virtues:** row-band partitioning keeps memory access sequential; broker + workers cleanly separates IO from compute; pause/stop is evaluated at turn boundaries so semantics are exact.
-- **Limitations:** per-turn goroutine + channel allocation in `nextWorld`; `CurrentMap` broadcast to every worker every turn; broker is a single serialisation point; no worker-failure recovery.]
+**Analysis.** Although the network bytes increases linearly, the speed-up does not. The reason can be that since the broker sends whole map to each worker, as the number of worekers incerases more than 4, the cost becomes more than it saves by splitting the map into a separate workers. Also, all workers, controller, and broker run on a M2 chip, which has 8-core, and they compete for a core, this result can depends on the number of cores. The real AWS nodes does not have cores, but the latency from sending data through network may cost higher.
 
 ---
 
