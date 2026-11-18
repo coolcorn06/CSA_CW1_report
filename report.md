@@ -15,6 +15,8 @@ A single-threaded Game of Life system is implemented first in this project. Acco
 
 ### 1.2 System architecture
 
+
+![arch](figures/architectureDiagram.png)
 [Figure 1: architecture diagram — controller (`distributor`, `startIo`, ticker) ↔ broker (`GolBroker`, `BrokerState`) ↔ N × worker (`GolWorker.Compute`). Show channels and RPC arrows.]
 
 [Since the distributor works as the controller of this game, the broker runs the main computation, and workers (AWS nodes) calculate the alive cells. When the distributor needs to place orders with the broker, it must also send the required information to the broker. The same logic can be applied to the relationship between the broker and workers.
@@ -81,11 +83,11 @@ Beside of main loop and *Worker goroutine*, Ticker goroutine (`time.NewTicker(2*
 ### 2.1 Implementation history *(required)*
 
 | Stage | Description | Throughput (turns/s) | Notes |
-|---|---|---|---|
-| S1 | Local, single-threaded (`-t 1`) | [TODO] | baseline |
-| S2 | Local, `p.Threads` workers per turn | [TODO] | first parallel version |
-| S3 | Local, channel-based pipeline | [TODO] | [TODO: what changed vs S2] |
-| S4 | Distributed, broker + N workers | [TODO] | final |
+|---|---|----------------------|---|
+| S1 | Local, single-threaded (`-t 1`) | [TODO]               | baseline |
+| S2 | Local, `p.Threads` workers per turn | [TODO]               | first parallel version |
+| S3 | Local, channel-based pipeline | [TODO]               | [TODO: what changed vs S2] |
+| S4 | Distributed, broker + N workers | [TODO]               | final |
 
 [Figure 2: bar chart of the four stages, same `-w 512 -h 512 -turns 100` configuration.]
 
@@ -105,10 +107,9 @@ It runs a 512x512 map, taking 1000 turns, 5 times with a different number of wor
 | 12 | 1.74e9 | 1.74 | 574 | 2.91× | 24% |
 | 16 | 1.78e9 | 1.78 | 562 | 2.84× | 18% |
 
-<img width="274" height="165" alt="image" src="https://github.com/user-attachments/assets/b2b8a978-8635-4dfd-b4c0-feb361648cb0" />
+![arch](figures/benchMark1.png)
 
-<img width="274" height="159" alt="image" src="https://github.com/user-attachments/assets/53315a21-4d45-448c-b845-e14e9fd612c4" />
-
+![arch](figures/benchMark2.png)
 
 **Analysis:** As these two pictures show, as the number of workers increases, the runtime significantly decreases. However, as Figure 2 shows, the runtime seems to converge at around 1.75 to 1.9 s/op as the number of workers increases, which means the runtime can be reduced by 5.08/1.75 ≒2.89 times by splitting the map into different threads. Additionally, this figure shows that the runtime is effectively reduced when the number of threads are from 1 to 12. However, after 12 workers, the time is not affected that much, and when it comes to the figure 1, 10 to 12 threads are relatively effective. Therefore, it can be concluded that 10 to 12 workers are the most effective number that can minimise the runtime because as the number increase, the cost of the computation increase as well. Beyond 12, the per-turn goroutine/channel allocation and memory-bandwidth contention take more CPU resources, which would offset efiiciency improved by further parallelism.
 
@@ -135,15 +136,14 @@ Figure 4: This is examined by running the benchmark_test.go on a M2 chip
 
 ## 3. Fault Tolerance *(Distributed)*
 
-| Failure | Current behaviour | Effect on results | Possible mitigation |
-|---|---|---|---|
-| One worker dies | `workers[i].Call` returns error, broker logs and pushes `nil` into that channel; `next` is shorter than `ImageHeight`; subsequent loops index out of range or silently produce wrong rows | **Corrupted world / panic** | Detect short `next`, fall back to `nextWorld` locally for that band, or abort and report to controller |
-| Broker dies | controller `client.Call` returns error, `quitRequested = true`, controller exits | **Run truncated**; `FinalTurnComplete` reports last successfully completed turn; final PGM **not written** if `quitRequested` | Retry-dial with backoff; buffer last world in controller and write PGM anyway |
-| Controller dies | broker's `Evolve` keeps running until `p.Turns` exhausted; AWS compute wasted | **No result produced**; worker CPUs burned | Heartbeat / lease: broker aborts `Evolve` if no controller activity for N seconds |
-| Network partition broker ↔ worker | Same as “one worker dies” | Corrupted world | Same as above |
-| Network partition controller ↔ broker | Same as “broker dies” | Truncated run | Same as above |
+| Failure                              | Current behaviour                                                                                                                                                                          | Effect on results                                                                                                              | Possible mitigation                                                                                                                |
+|--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
+| One worker dies                      | Broker exits:`[Broker] worker N failed: connection is shut down`; Controller exits:`Broker call failed: connection is shut down`                                                           | **Run terminated**; `FinalTurnComplete` reports last successfully completed turn; final PGM **not written** if `quitRequested` | Detect short `next`, fall back to `nextWorld` locally for that band, or abort and report to controller                             |
+| Broker dies                          | Controller exits: `Broker call failed: unexpected EOF`                                                                                                                                     | **Run terminated**; `FinalTurnComplete` reports last successfully completed turn; final PGM **not written** if `quitRequested` | Retry-dial with backoff; buffer last world in controller and write PGM anyway                                                      |
+| Network partition broker ↔ worker    | Broker exits:`[Broker] worker N failed: connection is shut down`Controller exits: `broker at x.x.x.x:brokerPort failed to dial: dial tcp x.x.x.x:brokerPort: connect: connection refused` | **Run terminated**; `FinalTurnComplete` does not reports; final PGM **not written** if `quitRequested`                         | Same as above                                                                                                                      |
+| Network partition controller ↔ broker | The controller stucks, key presses has no respond                                                                                                                                          | Truncated run                                                                                                                  | Make controller get in touch with broker by sending signal each other continuously. Broker kills all remote tasks if disconnected. |
 
-[TODO: 2–3 sentences summarising the trade-off — the current design is *fail-fast* rather than *fault-tolerant*: it never silently returns a wrong answer, but it also does not recover.]
+**Trade-offs:** The current design is *fail-fast* rather than *fault-tolerant*: it never silently returns a wrong answer, but it also does not recover.]
 
 ---
 
