@@ -155,14 +155,14 @@ Adding workers divides the computation. Thus it can grow the time per turn. Howe
 
 ## 5. Methodology *(both sections)*
 
-- **Hardware:** 13th Gen Intel(R) Core(TM) i7-13650HX (2.60 GHz), 14 cores, RAM: 32GB
-- **Environment:** **OS**: Ubuntu 26.04.1 LTS on WSL2 *(project located in `~/gameoflife`, **not** `/mnt/c/...`)*, **Go version**: go1.27.1 linux/amd64
-- **Timing:** [TODO: how you measured turns/s — e.g. `time.Now()` around the turn loop and subtract the PGM-load step, or external `time` on `-headless` runs.]
-- **Repetitions:** each configuration run 3 times; report the **median**.
-- **Isolation:** `-headless` for throughput runs; GUI only for correctness / key-press tests.
-- **Correctness check:** every distributed run compared byte-for-byte against the local `-t 1` output with `cmp out/local.pgm out/distributed.pgm`.
-- **Distributed setup:** [TODO: loopback on one machine, or broker + workers on N EC2 instances in the same region; state which.]
-- **Worker count:** `GOL_WORKERS` comma-separated list; `GOL_BROKER` for controller.
+- **Hardware:** M2 chip MacBook: an 8-core CPU (4 peformance + 4 efficiency).
+- **Environment:** **OS**: MacOS: Tahoe 26.5
+-  benchmark ran the full gol.Run pipeline on the 512×512 image for 1000 turns, including PGM input/output and event handling, with SDL disabled and all events drained.
+-  For the parallel implementation, the benchmark run with from 1 to 16 threads for 5 times each.
+-  for the distributed implementation, the benchmark run with from 1 to 8 workers for 3 times each.
+-  Network traffic: calculated by gob-encoding the actual ComputeRequest/ComputeResponse messages and multiplying by the number of workers and turns.
+-  Tool: Go's benchwork framework
+-  go version: go1.27.1 darwin/arm64
 
 ---
 
