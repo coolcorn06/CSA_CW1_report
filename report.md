@@ -157,10 +157,7 @@ However, this result might be affected by the chip of the computer that runs thi
 
 ## 4. Scaling with More Distributed Components *(Distributed)*
 
-[TODO: 3–4 sentences. Cover:
-- Adding workers helps **only until** the broker's serial `connectToWorkers` loop saturates — measured at [TODO] workers in §2.3.
-- The real ceiling is the **broadcast** of `CurrentMap` to every worker every turn: network cost grows as O(N × W × H). A halo-based scheme (send only `(band height + 2) × W`) would cut this by a factor of ~N.
-- Adding a **second broker** (sharded by row range) would parallelise the serialisation point, but requires a coordinator to merge partial worlds — extra latency per turn.]
+Adding workers divides the computation. Thus it can grow the time per turn. However, each worker recieves the entire map, so that each turn it must wait for the solwest worker to finish computation. As a result, as extra workers are added, the speed up get flat, and too many workers may cost more than it saves. In addition to it, the broker handles all workers, so even if one worker goes to failure, since there is no timeout logic herem the broker waits forever. Also, as the number of threads increases, the cpu gets buisier and the total runtime gets slower. 
 
 ---
 
