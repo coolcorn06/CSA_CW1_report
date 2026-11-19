@@ -4,6 +4,10 @@
 > - [Yanzhao Zou] - [coolcorn06]
 > - [Tomoki Hara] - [Tomoki1204]
 > - [Yangfan Zhou] - [Sandman26118]
+>
+
+> **Resause: **
+> https://github.com/Tomoki1204/figures-and-visualisation.git
 
 ---
 
@@ -15,8 +19,6 @@ A single-threaded Game of Life system is implemented first in this project. Acco
 
 ### 1.2 System architecture
 
-
-![arch](figures/architectureDiagram.png)
 [Figure 1: architecture diagram — controller (`distributor`, `startIo`, ticker) ↔ broker (`GolBroker`, `BrokerState`) ↔ N × worker (`GolWorker.Compute`). Show channels and RPC arrows.]
 
 [Since the distributor works as the controller of this game, the broker runs the main computation, and workers (AWS nodes) calculate the alive cells. When the distributor needs to place orders with the broker, it must also send the required information to the broker. The same logic can be applied to the relationship between the broker and workers.
@@ -83,14 +85,10 @@ Beside of main loop and *Worker goroutine*, Ticker goroutine (`time.NewTicker(2*
 
 ### 2.1 Implementation history *(required)*
 
-| Stage | Description | Throughput (turns/s) | Notes |
-|---|---|----------------------|---|
-| S1 | Local, single-threaded (`-t 1`) | [TODO]               | baseline |
-| S2 | Local, `p.Threads` workers per turn | [TODO]               | first parallel version |
-| S3 | Local, channel-based pipeline | [TODO]               | [TODO: what changed vs S2] |
-| S4 | Distributed, broker + N workers | [TODO]               | final |
+Figure 4: bar chart of the four stages, same `-w 512 -h 512 -turns 100` configuration.
 
-[Figure 2: bar chart of the four stages, same `-w 512 -h 512 -turns 100` configuration.]
+According to the figure, parallel 1 thread is the fastest and the distributed version is slower than both of them.
+
 
 ### 2.2 Parallel scaling *(Parallel)*
 
@@ -108,11 +106,7 @@ It runs a 512x512 map, taking 1000 turns, 5 times with a different number of wor
 | 12 | 1.74e9 | 1.74 | 574 | 2.91× | 24% |
 | 16 | 1.78e9 | 1.78 | 562 | 2.84× | 18% |
 
-![arch](figures/benchMark1.png)
-
-![arch](figures/benchMark2.png)
-
-**Analysis:** As these two pictures show, as the number of workers increases, the runtime significantly decreases. However, as Figure 2 shows, the runtime seems to converge at around 1.75 to 1.9 s/op as the number of workers increases, which means the runtime can be reduced by 5.08/1.75 ≒2.89 times by splitting the map into different threads. Additionally, this figure shows that the runtime is effectively reduced when the number of threads are from 1 to 12. However, after 12 workers, the time is not affected that much, and when it comes to the figure 1, 10 to 12 threads are relatively effective. Therefore, it can be concluded that 10 to 12 workers are the most effective number that can minimise the runtime because as the number increase, the cost of the computation increase as well. Beyond 12, the per-turn goroutine/channel allocation and memory-bandwidth contention take more CPU resources, which would offset efiiciency improved by further parallelism.
+**Analysis:** As these two pictures show, as the number of workers increases, the runtime significantly decreases. However, as Figure 3 shows, the runtime seems to converge at around 1.75 to 1.9 s/op as the number of workers increases, which means the runtime can be reduced by 5.08/1.75 ≒2.89 times by splitting the map into different threads. Additionally, this figure shows that the runtime is effectively reduced when the number of threads are from 1 to 12. However, after 12 workers, the time is not affected that much, and when it comes to the figure 2, 10 to 12 threads are relatively effective. Therefore, it can be concluded that 10 to 12 workers are the most effective number that can minimise the runtime because as the number increase, the cost of the computation increase as well. Beyond 12, the per-turn goroutine/channel allocation and memory-bandwidth contention take more CPU resources, which would offset efiiciency improved by further parallelism.
 
 Efficiency at 12 threads is only 2.89/12 = 24%, and at 16 threads 2.84/16 = 18%. This indicated that per-turn goroutine/channel allocation and shared-memory bandwidth become the primary dominant cost well before the core count is exhausted.
 
@@ -122,16 +116,31 @@ However, this result might be affected by the chip of the computer that runs thi
 
 **Experiment:** fixed `-w 512 -h 512 -turns 100`, `GOL_WORKERS` = 1, 2, 4, 8 workers, all on the same machine (loopback), median of 3 runs.
 
-| Workers | turns/s | Speed-up vs 1 worker | Network bytes per run |
-|---:|---:|---:|---:|
-| 1 | 100 | 1.00× | 528MB |
-| 2 | 189 | 1.72 | 791MB |
-| 4 | 289 | 2.62 | 1.32GB |
-| 8 | 246 | 2.23 | 2.37GB |
+-- 1 worker --
+| run | s | turns/s |
+|---:|---:|---:|
+|1| 38.69 | 5.17 |
+|2| 42.89 | 4.66 |
+|3| 38.76 | 5.18 |
 
-Figure 4: This is examined by running the benchmark_test.go on a M2 chip
+-- 2 workers --
+| run | s | turns/s |
+|---:|---:|---:|
+|1| 37.87 | 5.28 |
+|2| 30.81 | 6.49 |
+|3| 30.88 | 6.48 |
 
-**Analysis.** Although the network bytes increases linearly, the speed-up does not. The reason can be that since the broker sends whole map to each worker, as the number of worekers incerases more than 4, the cost becomes more than it saves by splitting the map into a separate workers. Also, all workers, controller, and broker run on a M2 chip, which has 8-core, and they compete for a core, this result can depends on the number of cores. The real AWS nodes does not have cores, but the latency from sending data through network may cost higher.
+-- 3 workers --
+| run | s | turns/s |
+|---:|---:|---:|
+|1| 31.36 | 6.38 |
+|2| 30.12 | 6.64 |
+|3| 39.00 | 5.13 |
+
+(512×512, 200 turns, median of 3): 5.15 / 6.48 / 6.37 turns/s for 1 / 2 / 4 workers. Speed-up is 1.26× at 2 workers and 1.24× at 4 workers;
+
+**Analysis.** For comparison, the local parallel implementation reaches 474 turns/s with 8 threads — the distributed version is 38× slower at 1 worker and 74× slower at 4 workers. The dominant cost is not computation but serialisation: every turn, the broker broadcasts the entire 512×512 CurrentMap to every worker, and [][]uint8 is the worst case for Go's gob encoder. At 4 workers this is 4 × 262 kB of gob-encoded data per turn, competing for the 2 vCPUs of a t3.micro.
+The flat 2→4 worker curve identifies the broker as the serialisation point: connectToWorkers collects results sequentially from per-worker channels, and the broker itself is a single goroutine. The two obvious improvements are (i) send only the worker's own band plus one halo row on each side — reducing per-worker traffic by roughly N×, and (ii) parallelise the collection step or merge it into the RPC completion path.
 
 ---
 
